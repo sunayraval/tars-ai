@@ -89,11 +89,10 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       };
       setMessages((prev) => [...prev, userMsg]);
 
-      try {
-        await addChatMessage(user.uid, { role: 'user', content });
-      } catch (err) {
+      // Fire and forget persistence
+      addChatMessage(user.uid, { role: 'user', content }).catch((err) => {
         console.error('Failed to persist user message:', err);
-      }
+      });
 
       // 2. Build context from the last N messages
       const contextMessages = [...messages, userMsg]
@@ -179,14 +178,12 @@ export function ChatProvider({ children }: { children: ReactNode }) {
             };
             setMessages((prev) => [...prev, assistantMsg]);
 
-            try {
-              await addChatMessage(user.uid, {
-                role: 'assistant',
-                content: accumulated,
-              });
-            } catch (err) {
+            addChatMessage(user.uid, {
+              role: 'assistant',
+              content: accumulated,
+            }).catch((err) => {
               console.error('Failed to persist assistant message:', err);
-            }
+            });
           }
         } else {
           // Non-streaming JSON response
@@ -209,14 +206,12 @@ export function ChatProvider({ children }: { children: ReactNode }) {
             setMessages((prev) => [...prev, assistantMsg]);
             setCurrentStreamedText(assistantContent);
 
-            try {
-              await addChatMessage(user.uid, {
-                role: 'assistant',
-                content: assistantContent,
-              });
-            } catch (err) {
+            addChatMessage(user.uid, {
+              role: 'assistant',
+              content: assistantContent,
+            }).catch((err) => {
               console.error('Failed to persist assistant message:', err);
-            }
+            });
           }
         }
       } catch (err: any) {
@@ -254,11 +249,9 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       };
       setMessages((prev) => [...prev, sysMsg]);
 
-      try {
-        await addChatMessage(user.uid, { role: 'system', content });
-      } catch (err) {
+      addChatMessage(user.uid, { role: 'system', content }).catch((err) => {
         console.error('Failed to persist system message:', err);
-      }
+      });
     },
     [user]
   );
