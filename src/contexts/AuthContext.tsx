@@ -21,7 +21,7 @@ import {
   signInWithGoogle,
   signOut as firebaseSignOut,
 } from '@/lib/firebase/auth';
-import { createUserDocument } from '@/lib/firebase/firestore';
+import { createUserDocument, getUserDocument } from '@/lib/firebase/firestore';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -29,9 +29,11 @@ import { createUserDocument } from '@/lib/firebase/firestore';
 
 interface AuthContextValue {
   user: FirebaseUser | null;
+  userPreferences: any;
   loading: boolean;
   signIn: () => Promise<void>;
   signOut: () => Promise<void>;
+  refreshPreferences: () => Promise<void>;
 }
 
 // ---------------------------------------------------------------------------
@@ -46,14 +48,30 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<FirebaseUser | null>(null);
+  const [userPreferences, setUserPreferences] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+
+  const fetchPrefs = useCallback(async (uid: string) => {
+    try {
+      const doc = await getUserDocument(uid);
+      setUserPreferences(doc?.preferences || {});
+    } catch (e) {
+      console.error(e);
+      setUserPreferences({});
+    }
+  }, []);
+
+  const refreshPreferences = useCallback(async () => {
+    if (user?.uid) {
+      await fetchPrefs(user.uid);
+    }
+  }, [user, fetchPrefs]);
 
   // Subscribe to Firebase auth state changes
   useEffect(() => {
     const unsubscribe = subscribeToAuthChanges(async (firebaseUser) => {
       setUser(firebaseUser);
-      setLoading(false);
-
+      
       // Persist user document on sign-in
       if (firebaseUser) {
         try {
@@ -61,16 +79,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             uid: firebaseUser.uid,
             email: firebaseUser.email,
             displayName: firebaseUser.displayName,
-            preferences: {},
+            preferences: {}, // Merged softly in firestore if exists
           });
+          
+          await fetchPrefs(firebaseUser.uid);
         } catch (err) {
           console.error('Failed to create/update user document:', err);
         }
+      } else {
+        setUserPreferences(null);
       }
+      
+      setLoading(false);
     });
 
     return unsubscribe;
-  }, []);
+  }, [fetchPrefs]);
 
   const signIn = useCallback(async () => {
     try {
@@ -89,7 +113,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, loading, signIn, signOut }}>
+    <AuthContext.Provider value={{ user, userPreferences, loading, signIn, signOut, refreshPreferences }}>
       {children}
     </AuthContext.Provider>
   );

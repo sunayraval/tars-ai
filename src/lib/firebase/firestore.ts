@@ -6,6 +6,10 @@ export const db = getFirestore(app);
 // Types
 export interface UserPreferences {
   theme?: 'light' | 'dark' | 'system';
+  onboardingCompleted?: boolean;
+  workingHours?: string;
+  breakPreference?: string;
+  focusStyle?: string;
   [key: string]: any;
 }
 

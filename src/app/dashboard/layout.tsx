@@ -5,6 +5,7 @@ import { AuthProvider, useAuthContext } from '@/contexts/AuthContext';
 import { ChatProvider } from '@/contexts/ChatContext';
 import { ScheduleProvider } from '@/contexts/ScheduleContext';
 import OnboardingGate from '@/components/settings/OnboardingGate';
+import StatusBar from '@/components/ui/StatusBar';
 
 export default function DashboardLayout({
   children,
@@ -46,6 +47,7 @@ export default function DashboardLayout({
               {/* Main content */}
               <main className="flex-1 overflow-hidden flex flex-col">
                 <OnboardingGate>
+                  <StatusBar />
                   {children}
                 </OnboardingGate>
               </main>

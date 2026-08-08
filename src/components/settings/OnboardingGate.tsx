@@ -2,37 +2,33 @@
 
 import React, { useEffect, useState } from 'react';
 import { useAuthContext } from '@/contexts/AuthContext';
-import { getUserDocument, db } from '@/lib/firebase/firestore';
+import { db } from '@/lib/firebase/firestore';
 import { doc, updateDoc } from 'firebase/firestore';
 import GlowButton from '@/components/ui/GlowButton';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export default function OnboardingGate({ children }: { children: React.ReactNode }) {
-  const { user } = useAuthContext();
-  const [loading, setLoading] = useState(true);
+  const { user, userPreferences, loading, refreshPreferences } = useAuthContext();
   const [needsOnboarding, setNeedsOnboarding] = useState(false);
   
   const [step, setStep] = useState(1);
   const [apiKey, setApiKey] = useState('');
+  
+  // New Preferences
+  const [workingHours, setWorkingHours] = useState('9 AM - 5 PM');
+  const [breakPreference, setBreakPreference] = useState('10 mins every hour');
+  const [focusStyle, setFocusStyle] = useState('Pomodoro (25m work / 5m break)');
+  
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
-    if (!user) return;
-    
-    const checkOnboarding = async () => {
-      try {
-        const userDoc = await getUserDocument(user.uid);
-        if (!userDoc?.preferences?.onboardingCompleted) {
-          setNeedsOnboarding(true);
-        }
-      } catch (err) {
-        console.error("Failed to check onboarding", err);
-      } finally {
-        setLoading(false);
+    if (loading) return;
+    if (user && userPreferences) {
+      if (!userPreferences.onboardingCompleted) {
+        setNeedsOnboarding(true);
       }
-    };
-    checkOnboarding();
-  }, [user]);
+    }
+  }, [user, userPreferences, loading]);
 
   const handleComplete = async () => {
     if (!user) return;
@@ -49,9 +45,13 @@ export default function OnboardingGate({ children }: { children: React.ReactNode
       
       const userRef = doc(db, 'users', user.uid);
       await updateDoc(userRef, {
+        'preferences.workingHours': workingHours,
+        'preferences.breakPreference': breakPreference,
+        'preferences.focusStyle': focusStyle,
         'preferences.onboardingCompleted': true
       });
       
+      await refreshPreferences();
       setNeedsOnboarding(false);
     } catch (err) {
       console.error(err);
@@ -61,7 +61,7 @@ export default function OnboardingGate({ children }: { children: React.ReactNode
   };
 
   if (loading) {
-    return <div className="h-screen w-full flex items-center justify-center text-white/50">Loading preferences...</div>;
+    return <div className="h-screen w-full flex items-center justify-center text-white/50 bg-black">Loading...</div>;
   }
 
   if (needsOnboarding) {
@@ -91,10 +91,67 @@ export default function OnboardingGate({ children }: { children: React.ReactNode
               </GlowButton>
             </motion.div>
           )}
-          
+
           {step === 2 && (
             <motion.div 
               key="step2"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="glass p-8 rounded-3xl max-w-lg w-full z-10 border border-white/20"
+            >
+              <h2 className="text-2xl font-bold text-white mb-2">Time Management Profile</h2>
+              <p className="text-white/50 text-sm mb-6">
+                Tell me how you like to work so I can generate the perfect schedules for you.
+              </p>
+              
+              <div className="space-y-4 mb-8">
+                <div>
+                  <label className="block text-xs font-medium text-white/70 mb-1">Typical Working Hours</label>
+                  <input
+                    type="text"
+                    value={workingHours}
+                    onChange={(e) => setWorkingHours(e.target.value)}
+                    placeholder="e.g., 9 AM - 5 PM"
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-white/30 focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500 transition-all text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-white/70 mb-1">Focus Style</label>
+                  <input
+                    type="text"
+                    value={focusStyle}
+                    onChange={(e) => setFocusStyle(e.target.value)}
+                    placeholder="e.g., Pomodoro, Deep Work sprints"
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-white/30 focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500 transition-all text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-white/70 mb-1">Break Preference</label>
+                  <input
+                    type="text"
+                    value={breakPreference}
+                    onChange={(e) => setBreakPreference(e.target.value)}
+                    placeholder="e.g., 10 mins every hour"
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-white/30 focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500 transition-all text-sm"
+                  />
+                </div>
+              </div>
+              
+              <div className="flex gap-4">
+                <button onClick={() => setStep(1)} className="px-6 py-3 rounded-xl border border-white/10 text-white/70 hover:bg-white/5 transition-colors">
+                  Back
+                </button>
+                <GlowButton onClick={() => setStep(3)} className="flex-1 justify-center py-3 text-lg">
+                  Next Step
+                </GlowButton>
+              </div>
+            </motion.div>
+          )}
+          
+          {step === 3 && (
+            <motion.div 
+              key="step3"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
@@ -120,7 +177,7 @@ export default function OnboardingGate({ children }: { children: React.ReactNode
               </div>
               
               <div className="flex gap-4">
-                <button onClick={() => setStep(1)} className="px-6 py-3 rounded-xl border border-white/10 text-white/70 hover:bg-white/5 transition-colors">
+                <button onClick={() => setStep(2)} className="px-6 py-3 rounded-xl border border-white/10 text-white/70 hover:bg-white/5 transition-colors">
                   Back
                 </button>
                 <GlowButton onClick={handleComplete} disabled={isSaving} className="flex-1 justify-center py-3 text-lg">

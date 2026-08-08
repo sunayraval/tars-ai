@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase/firestore';
+import { useAuthContext } from '@/contexts/AuthContext';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -11,8 +12,14 @@ interface SettingsModalProps {
 }
 
 export default function SettingsModal({ isOpen, onClose, uid }: SettingsModalProps) {
+  const { refreshPreferences } = useAuthContext();
   const [model, setModel] = useState('openrouter/free');
   const [apiKey, setApiKey] = useState('');
+  
+  const [workingHours, setWorkingHours] = useState('9 AM - 5 PM');
+  const [breakPreference, setBreakPreference] = useState('10 mins every hour');
+  const [focusStyle, setFocusStyle] = useState('Pomodoro (25m work / 5m break)');
+  
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -21,6 +28,9 @@ export default function SettingsModal({ isOpen, onClose, uid }: SettingsModalPro
         if (docSnap.exists()) {
           const data = docSnap.data();
           if (data.settings?.model) setModel(data.settings.model);
+          if (data.preferences?.workingHours) setWorkingHours(data.preferences.workingHours);
+          if (data.preferences?.breakPreference) setBreakPreference(data.preferences.breakPreference);
+          if (data.preferences?.focusStyle) setFocusStyle(data.preferences.focusStyle);
         }
       });
     }
@@ -32,17 +42,23 @@ export default function SettingsModal({ isOpen, onClose, uid }: SettingsModalPro
     setSaving(true);
     try {
       if (apiKey) {
-        await fetch('/api/keys', {
+        await fetch('/api/settings', { // FIXED ENDPOINT to /api/settings
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ key: apiKey })
+          body: JSON.stringify({ uid, apiKey, model })
         });
       }
       
       await setDoc(doc(db, 'users', uid), {
-        settings: { model }
+        settings: { model },
+        preferences: {
+          workingHours,
+          breakPreference,
+          focusStyle,
+        }
       }, { merge: true });
 
+      await refreshPreferences();
       setApiKey('');
       onClose();
     } catch (error) {
@@ -100,6 +116,42 @@ export default function SettingsModal({ isOpen, onClose, uid }: SettingsModalPro
             <p className="mt-2 text-xs text-white/40">
               Keys are encrypted locally and never stored in plain text.
             </p>
+          </div>
+          
+          <hr className="border-white/10" />
+          
+          <div>
+            <label className="block text-sm font-medium text-white/80 mb-2">
+              Working Hours
+            </label>
+            <input
+              type="text"
+              value={workingHours}
+              onChange={(e) => setWorkingHours(e.target.value)}
+              className="w-full rounded-xl glass bg-white/5 px-4 py-2.5 text-sm text-white border border-white/20 focus:outline-none focus:ring-2 focus:ring-violet-500 transition-all"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-white/80 mb-2">
+              Focus Style
+            </label>
+            <input
+              type="text"
+              value={focusStyle}
+              onChange={(e) => setFocusStyle(e.target.value)}
+              className="w-full rounded-xl glass bg-white/5 px-4 py-2.5 text-sm text-white border border-white/20 focus:outline-none focus:ring-2 focus:ring-violet-500 transition-all"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-white/80 mb-2">
+              Break Preference
+            </label>
+            <input
+              type="text"
+              value={breakPreference}
+              onChange={(e) => setBreakPreference(e.target.value)}
+              className="w-full rounded-xl glass bg-white/5 px-4 py-2.5 text-sm text-white border border-white/20 focus:outline-none focus:ring-2 focus:ring-violet-500 transition-all"
+            />
           </div>
         </div>
         
