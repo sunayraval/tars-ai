@@ -6,16 +6,16 @@ import { useChatContext } from '@/contexts/ChatContext';
 import GlowButton from '@/components/ui/GlowButton';
 
 export default function ScheduleBuilder() {
-  const { state, cancelSchedule } = useScheduleContext();
-  const { sendMessage } = useChatContext();
+  const { state, cancelSchedule, generateSchedule, submitAnswer } = useScheduleContext();
   
   const [goal, setGoal] = useState('');
   const [energy, setEnergy] = useState<'low' | 'medium' | 'high'>('medium');
 
   const handleGenerate = () => {
     if (!goal.trim()) return;
-    sendMessage(`I want to focus on: ${goal}. My energy level is ${energy}. Please generate my schedule for today.`);
-    cancelSchedule();
+    submitAnswer('preferences', goal);
+    submitAnswer('energy', energy);
+    generateSchedule();
   };
 
   if (state === 'GENERATING') {

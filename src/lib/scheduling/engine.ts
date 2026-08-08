@@ -86,6 +86,8 @@ export async function buildScheduleFromAI(
 ): Promise<DailySchedule> {
   const userPrompt = buildGenerationPrompt(answers, tasks, calendarEvents);
 
+  const apiKey = typeof window !== 'undefined' ? localStorage.getItem('openRouterApiKey') : '';
+
   const response = await fetch('/api/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -95,6 +97,7 @@ export async function buildScheduleFromAI(
         { role: 'user', content: userPrompt },
       ],
       uid,
+      apiKey: apiKey || '',
       stream: false,
     }),
   });
@@ -196,6 +199,8 @@ export async function generateCheckIn(
 
   const checkInPrompt = buildCheckInPrompt(block, currentTime, schedule);
 
+  const apiKey = typeof window !== 'undefined' ? localStorage.getItem('openRouterApiKey') : '';
+
   const response = await fetch('/api/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -205,6 +210,7 @@ export async function generateCheckIn(
         { role: 'user', content: checkInPrompt },
       ],
       uid,
+      apiKey: apiKey || '',
       stream: false,
     }),
   });

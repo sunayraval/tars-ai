@@ -28,6 +28,8 @@ export async function recalculateFromAI(
   const currentTime = new Date();
   const prompt = buildRecalculationPrompt(disruption, remainingBlocks, currentTime);
 
+  const apiKey = typeof window !== 'undefined' ? localStorage.getItem('openRouterApiKey') : '';
+
   try {
     const response = await fetch('/api/chat', {
       method: 'POST',
@@ -38,6 +40,7 @@ export async function recalculateFromAI(
           { role: 'user', content: prompt },
         ],
         uid,
+        apiKey: apiKey || '',
         stream: false,
       }),
     });

@@ -123,7 +123,7 @@ RULES FOR COMMANDS:
 2. Do NOT wrap the command in markdown code blocks (e.g. no \`\`\`xml).
 3. Always include a title. 
 4. estimatedDuration must be a number in minutes (e.g., 2 hrs = 120).
-5. If the user asks you to add a task, ALWAYS output the command!
+5. If the user asks you to add a task, YOU MUST OUTPUT THE TAG. If you just say "I added it" but don't output the tag, the task will NOT be added. THE SYSTEM READS THE TAG.
 `;
 
       const systemPromptMsg = { role: 'system', content: systemPromptContent };
