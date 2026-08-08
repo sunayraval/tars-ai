@@ -1,29 +1,11 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
-import { useAuthContext } from '@/contexts/AuthContext';
-import { getPlanningBacklogs, getChatHistory, PlanningBacklog, ChatMessage } from '@/lib/firebase/firestore';
+import React from 'react';
+import { useHistoryContext } from '@/contexts/HistoryContext';
 import { AnimatedListContainer, AnimatedListItem } from '@/components/ui/AnimatedList';
 
 export default function HistoryPage() {
-  const { user } = useAuthContext();
-  const [backlogs, setBacklogs] = useState<PlanningBacklog[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    if (!user) return;
-    const fetchHistory = async () => {
-      try {
-        const fetchedBacklogs = await getPlanningBacklogs(user.uid);
-        setBacklogs(fetchedBacklogs);
-      } catch (err) {
-        console.error("Failed to fetch backlogs", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchHistory();
-  }, [user]);
+  const { backlogs, loading } = useHistoryContext();
 
   return (
     <div className="h-full flex flex-col p-6 overflow-hidden">

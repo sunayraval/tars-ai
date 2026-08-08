@@ -1,9 +1,10 @@
 'use client';
-
 import React from 'react';
-import { AuthProvider, useAuthContext } from '@/contexts/AuthContext';
 import { ChatProvider } from '@/contexts/ChatContext';
+import { AuthProvider, useAuthContext } from '@/contexts/AuthContext';
 import { ScheduleProvider } from '@/contexts/ScheduleContext';
+import { TasksProvider } from '@/contexts/TasksContext';
+import { HistoryProvider } from '@/contexts/HistoryContext';
 import OnboardingGate from '@/components/settings/OnboardingGate';
 import StatusBar from '@/components/ui/StatusBar';
 
@@ -15,45 +16,49 @@ export default function DashboardLayout({
   return (
     <AuthProvider>
       <AuthGate>
-        <ChatProvider>
-          <ScheduleProvider>
-            <div className="flex h-screen bg-transparent overflow-hidden">
-              {/* Sidebar */}
-              <aside className="hidden lg:flex flex-col w-72 bg-black/30 backdrop-blur-2xl border-r border-white/10">
-                {/* Logo / Brand */}
-                <div className="px-6 py-5 border-b border-white/10">
-                  <h1 className="text-lg font-bold text-white flex items-center gap-2">
-                    <span className="flex items-center justify-center h-8 w-8 rounded-lg bg-gradient-to-br from-violet-500 to-indigo-600 glow-violet">
-                      ⏱️
-                    </span>
-                    TARS-AI
-                  </h1>
-                  <p className="text-xs text-white/50 mt-1">
-                    AI-powered daily planner
-                  </p>
+        <TasksProvider>
+          <HistoryProvider>
+            <ChatProvider>
+              <ScheduleProvider>
+                <div className="flex h-screen bg-transparent overflow-hidden">
+                  {/* Sidebar */}
+                  <aside className="hidden lg:flex flex-col w-72 bg-black/30 backdrop-blur-2xl border-r border-white/10">
+                    {/* Logo / Brand */}
+                    <div className="px-6 py-5 border-b border-white/10">
+                      <h1 className="text-lg font-bold text-white flex items-center gap-2">
+                        <span className="flex items-center justify-center h-8 w-8 rounded-lg bg-gradient-to-br from-violet-500 to-indigo-600 glow-violet">
+                          ⏱️
+                        </span>
+                        TARS-AI
+                      </h1>
+                      <p className="text-xs text-white/50 mt-1">
+                        AI-powered daily planner
+                      </p>
+                    </div>
+
+                    {/* Nav links */}
+                    <nav className="flex-1 px-4 py-4 space-y-1">
+                      <NavLink label="Dashboard" icon="📊" href="/dashboard" />
+                      <NavLink label="Tasks" icon="📝" href="/dashboard/tasks" />
+                      <NavLink label="History" icon="📜" href="/dashboard/history" />
+                    </nav>
+
+                    {/* User section */}
+                    <UserFooter />
+                  </aside>
+
+                  {/* Main content */}
+                  <main className="flex-1 overflow-hidden flex flex-col">
+                    <OnboardingGate>
+                      <StatusBar />
+                      {children}
+                    </OnboardingGate>
+                  </main>
                 </div>
-
-                {/* Nav links */}
-                <nav className="flex-1 px-4 py-4 space-y-1">
-                  <NavLink label="Dashboard" icon="📊" href="/dashboard" />
-                  <NavLink label="Tasks" icon="📝" href="/dashboard/tasks" />
-                  <NavLink label="History" icon="📜" href="/dashboard/history" />
-                </nav>
-
-                {/* User section */}
-                <UserFooter />
-              </aside>
-
-              {/* Main content */}
-              <main className="flex-1 overflow-hidden flex flex-col">
-                <OnboardingGate>
-                  <StatusBar />
-                  {children}
-                </OnboardingGate>
-              </main>
-            </div>
-          </ScheduleProvider>
-        </ChatProvider>
+              </ScheduleProvider>
+            </ChatProvider>
+          </HistoryProvider>
+        </TasksProvider>
       </AuthGate>
     </AuthProvider>
   );
