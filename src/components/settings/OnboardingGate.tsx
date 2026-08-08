@@ -30,34 +30,39 @@ export default function OnboardingGate({ children }: { children: React.ReactNode
     }
   }, [user, userPreferences, loading]);
 
-  const handleComplete = async () => {
+  const handleComplete = () => {
     if (!user) return;
     setIsSaving(true);
     
-    try {
-      if (apiKey.trim()) {
-        await fetch('/api/settings', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ uid: user.uid, apiKey: apiKey.trim() }),
+    const saveToCloud = async () => {
+      try {
+        if (apiKey.trim()) {
+          await fetch('/api/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ uid: user.uid, apiKey: apiKey.trim() }),
+          });
+        }
+        
+        const userRef = doc(db, 'users', user.uid);
+        await updateDoc(userRef, {
+          'preferences.workingHours': workingHours,
+          'preferences.breakPreference': breakPreference,
+          'preferences.focusStyle': focusStyle,
+          'preferences.onboardingCompleted': true
         });
+        
+        await refreshPreferences();
+      } catch (err) {
+        console.error("Failed to save onboarding settings", err);
       }
-      
-      const userRef = doc(db, 'users', user.uid);
-      await updateDoc(userRef, {
-        'preferences.workingHours': workingHours,
-        'preferences.breakPreference': breakPreference,
-        'preferences.focusStyle': focusStyle,
-        'preferences.onboardingCompleted': true
-      });
-      
-      await refreshPreferences();
-      setNeedsOnboarding(false);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setIsSaving(false);
-    }
+    };
+
+    saveToCloud();
+
+    // Instantly proceed for Optimistic UI
+    setIsSaving(false);
+    setNeedsOnboarding(false);
   };
 
   if (loading) {

@@ -38,35 +38,41 @@ export default function SettingsModal({ isOpen, onClose, uid }: SettingsModalPro
 
   if (!isOpen) return null;
 
-  const handleSave = async () => {
+  const handleSave = () => {
     setSaving(true);
-    try {
-      if (apiKey) {
-        await fetch('/api/settings', { // FIXED ENDPOINT to /api/settings
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ uid, apiKey, model })
-        });
-      }
-      
-      await setDoc(doc(db, 'users', uid), {
-        settings: { model },
-        preferences: {
-          workingHours,
-          breakPreference,
-          focusStyle,
+    
+    // Fire and forget API and Firestore updates in the background
+    const saveToCloud = async () => {
+      try {
+        if (apiKey) {
+          await fetch('/api/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ uid, apiKey, model })
+          });
         }
-      }, { merge: true });
+        
+        await setDoc(doc(db, 'users', uid), {
+          settings: { model },
+          preferences: {
+            workingHours,
+            breakPreference,
+            focusStyle,
+          }
+        }, { merge: true });
 
-      await refreshPreferences();
-      setApiKey('');
-      onClose();
-    } catch (error) {
-      console.error('Failed to save settings:', error);
-      alert('Failed to save settings');
-    } finally {
-      setSaving(false);
-    }
+        await refreshPreferences();
+      } catch (error) {
+        console.error('Failed to save settings:', error);
+      }
+    };
+    
+    saveToCloud();
+    
+    // Instantly close the modal for Optimistic UI
+    setSaving(false);
+    setApiKey('');
+    onClose();
   };
 
   return (
