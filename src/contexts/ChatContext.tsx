@@ -94,7 +94,14 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         console.error('Failed to persist user message:', err);
       });
 
-      // 2. Fetch current tasks to build context
+      // 2. Start streaming UI immediately (optimistic UI)
+      setIsStreaming(true);
+      setCurrentStreamedText('');
+
+      const controller = new AbortController();
+      abortRef.current = controller;
+
+      // 3. Fetch current tasks to build context
       let currentTasks: Task[] = [];
       try {
         currentTasks = await getUserTasks(user.uid);
@@ -102,16 +109,21 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         console.error('Failed to get tasks for context:', err);
       }
 
-      const systemPromptContent = `You are TARS-AI, an intelligent time-management assistant.
+      const systemPromptContent = `You are TARS-AI, an intelligent time-management and productivity assistant.
 You have access to the user's current tasks.
 CURRENT TASKS:
 ${JSON.stringify(currentTasks.map(t => ({ id: t.id, title: t.title, status: t.status })), null, 2)}
 
-You can manage the user's tasks by outputting XML-like commands in your response. These commands will be intercepted and executed by the system.
-Commands available:
-- <ADD_TASK>{"title": "...", "description": "...", "estimatedDuration": 30}</ADD_TASK>
+CRITICAL INSTRUCTION: You can manage the user's tasks by outputting XML commands. 
+If the user asks you to add a task, schedule something, or add something to their agenda, you MUST output the following command exactly as shown:
+<ADD_TASK>{"title": "Task Name", "description": "Details", "estimatedDuration": 120}</ADD_TASK>
 
-When a user asks you to add a task, output the <ADD_TASK> command anywhere in your response containing a JSON payload. Do NOT wrap the command in markdown code blocks. Always include a title. estimatedDuration is in minutes.
+RULES FOR COMMANDS:
+1. You must output the command in raw text anywhere in your response.
+2. Do NOT wrap the command in markdown code blocks (e.g. no \`\`\`xml).
+3. Always include a title. 
+4. estimatedDuration must be a number in minutes (e.g., 2 hrs = 120).
+5. If the user asks you to add a task, ALWAYS output the command!
 `;
 
       const systemPromptMsg = { role: 'system', content: systemPromptContent };
@@ -121,13 +133,6 @@ When a user asks you to add a task, output the <ADD_TASK> command anywhere in yo
         ...messages.slice(-MAX_CONTEXT_MESSAGES),
         userMsg,
       ].map((m) => ({ role: m.role, content: m.content }));
-
-      // 3. Stream AI response
-      setIsStreaming(true);
-      setCurrentStreamedText('');
-
-      const controller = new AbortController();
-      abortRef.current = controller;
 
       try {
         const apiKey = localStorage.getItem('openRouterApiKey');
