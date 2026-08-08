@@ -5,9 +5,10 @@ import type { TimeBlock } from '@/lib/scheduling/types';
 
 interface AgendaItemProps {
   entry: TimeBlock;
+  onComplete?: () => void;
 }
 
-export default function AgendaItem({ entry }: AgendaItemProps) {
+export default function AgendaItem({ entry, onComplete }: AgendaItemProps) {
   const isTask = !entry.isCalendarEvent;
   const isCalendar = entry.isCalendarEvent;
   const isCompleted = isTask && entry.status === 'completed';
@@ -58,7 +59,9 @@ export default function AgendaItem({ entry }: AgendaItemProps) {
 
           {/* Action Checkbox (if task) */}
           {isTask && (
-            <button className={`
+            <button 
+              onClick={onComplete}
+              className={`
               mt-0.5 flex-shrink-0 h-5 w-5 rounded border flex items-center justify-center transition-all
               ${isCompleted 
                 ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400' 

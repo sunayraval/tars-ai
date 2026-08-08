@@ -4,6 +4,7 @@ import React from 'react';
 import { AuthProvider, useAuthContext } from '@/contexts/AuthContext';
 import { ChatProvider } from '@/contexts/ChatContext';
 import { ScheduleProvider } from '@/contexts/ScheduleContext';
+import OnboardingGate from '@/components/settings/OnboardingGate';
 
 export default function DashboardLayout({
   children,
@@ -33,9 +34,9 @@ export default function DashboardLayout({
 
                 {/* Nav links */}
                 <nav className="flex-1 px-4 py-4 space-y-1">
-                  <NavLink label="Dashboard" icon="📊" active />
-                  <NavLink label="Tasks" icon="📝" />
-                  <NavLink label="History" icon="📜" />
+                  <NavLink label="Dashboard" icon="📊" href="/dashboard" />
+                  <NavLink label="Tasks" icon="📝" href="/dashboard/tasks" />
+                  <NavLink label="History" icon="📜" href="/dashboard/history" />
                 </nav>
 
                 {/* User section */}
@@ -43,7 +44,11 @@ export default function DashboardLayout({
               </aside>
 
               {/* Main content */}
-              <main className="flex-1 overflow-hidden flex flex-col">{children}</main>
+              <main className="flex-1 overflow-hidden flex flex-col">
+                <OnboardingGate>
+                  {children}
+                </OnboardingGate>
+              </main>
             </div>
           </ScheduleProvider>
         </ChatProvider>
@@ -94,26 +99,34 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+
 function NavLink({
   label,
   icon,
-  active,
+  href,
 }: {
   label: string;
   icon: string;
-  active?: boolean;
+  href: string;
 }) {
+  const pathname = usePathname();
+  const active = pathname === href;
+  
   return (
-    <div
-      className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm cursor-pointer glass-hover ${
-        active
-          ? 'bg-white/10 text-violet-300 font-medium border border-white/20'
-          : 'text-white/60 hover:text-white border border-transparent'
-      }`}
-    >
-      <span>{icon}</span>
-      {label}
-    </div>
+    <Link href={href}>
+      <div
+        className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm cursor-pointer glass-hover ${
+          active
+            ? 'bg-white/10 text-violet-300 font-medium border border-white/20'
+            : 'text-white/60 hover:text-white border border-transparent'
+        }`}
+      >
+        <span>{icon}</span>
+        {label}
+      </div>
+    </Link>
   );
 }
 

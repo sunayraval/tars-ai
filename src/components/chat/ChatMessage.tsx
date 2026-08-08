@@ -8,6 +8,8 @@ interface ChatMessageProps {
   isStreaming?: boolean;
 }
 
+import { motion } from 'framer-motion';
+
 export default function ChatMessage({ message, isStreaming }: ChatMessageProps) {
   const { role, content, timestamp } = message;
 
@@ -27,19 +29,26 @@ export default function ChatMessage({ message, isStreaming }: ChatMessageProps) 
 
   if (role === 'system') {
     return (
-      <div className="flex justify-center my-2 px-4">
+      <motion.div 
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="flex justify-center my-2 px-4"
+      >
         <div className="max-w-md rounded-lg bg-white/5 border border-white/10 px-4 py-2 text-xs text-white/50 text-center">
           <RenderMarkdown text={content} />
           <span className="block mt-1 text-[10px] opacity-60 text-white/30">{timeStr}</span>
         </div>
-      </div>
+      </motion.div>
     );
   }
 
   const isUser = role === 'user';
 
   return (
-    <div
+    <motion.div
+      initial={{ opacity: 0, y: 15, scale: 0.95 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ duration: 0.3, ease: 'easeOut' }}
       className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-3 px-4`}
     >
       {!isUser && (
@@ -79,7 +88,7 @@ export default function ChatMessage({ message, isStreaming }: ChatMessageProps) 
           </div>
         </div>
       )}
-    </div>
+    </motion.div>
   );
 }
 
