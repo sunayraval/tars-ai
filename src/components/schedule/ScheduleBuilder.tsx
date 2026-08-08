@@ -10,9 +10,12 @@ export default function ScheduleBuilder() {
   
   const [goal, setGoal] = useState('');
   const [energy, setEnergy] = useState<'low' | 'medium' | 'high'>('medium');
+  const [startTime, setStartTime] = useState('09:00');
+  const [endTime, setEndTime] = useState('17:00');
 
   const handleGenerate = () => {
     if (!goal.trim()) return;
+    submitAnswer('work_hours', `${startTime} to ${endTime}`);
     submitAnswer('preferences', goal);
     submitAnswer('energy', energy);
     generateSchedule();
@@ -50,7 +53,7 @@ export default function ScheduleBuilder() {
       <div className="space-y-6 flex-1">
         <div>
           <label className="block text-sm font-medium text-white/80 mb-2">
-            What&apos;s your main goal or theme today?
+            What's your main goal or theme today?
           </label>
           <textarea
             value={goal}
@@ -58,6 +61,31 @@ export default function ScheduleBuilder() {
             placeholder="e.g. Finish the design presentation and catch up on emails..."
             className="w-full h-24 resize-none rounded-xl glass bg-white/5 px-4 py-3 text-sm text-white placeholder:text-white/30 border border-white/20 focus:outline-none focus:ring-2 focus:ring-violet-500 transition-all scrollbar-glass"
           />
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-white/80 mb-2">
+              Start Time
+            </label>
+            <input
+              type="time"
+              value={startTime}
+              onChange={(e) => setStartTime(e.target.value)}
+              className="w-full rounded-xl glass bg-white/5 px-4 py-3 text-sm text-white border border-white/20 focus:outline-none focus:ring-2 focus:ring-violet-500 transition-all [color-scheme:dark]"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-white/80 mb-2">
+              End Time
+            </label>
+            <input
+              type="time"
+              value={endTime}
+              onChange={(e) => setEndTime(e.target.value)}
+              className="w-full rounded-xl glass bg-white/5 px-4 py-3 text-sm text-white border border-white/20 focus:outline-none focus:ring-2 focus:ring-violet-500 transition-all [color-scheme:dark]"
+            />
+          </div>
         </div>
 
         <div>

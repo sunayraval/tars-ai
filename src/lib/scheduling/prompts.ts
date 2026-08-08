@@ -94,9 +94,12 @@ export function buildGenerationPrompt(
       ? `\nCALENDAR EVENTS (immovable — include them as blocks with isCalendarEvent: true):\n${calendarEvents.map((e) => `• "${e.title}": ${e.start} – ${e.end}`).join('\n')}`
       : '';
 
-  const todayISO = new Date().toISOString().slice(0, 10);
+  const now = new Date();
+  const todayISO = now.toISOString().slice(0, 10);
+  const currentTime = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
   return `Generate a daily schedule for ${todayISO}.
+CURRENT TIME: ${currentTime}
 
 USER PREFERENCES:
 ${answersText}
@@ -106,6 +109,7 @@ ${taskList || '(none — suggest a light day with focus on breaks and reflection
 ${calendarSection}
 
 RULES:
+- Start scheduling from the CURRENT TIME (${currentTime}) or later. DO NOT schedule tasks in the past.
 - Respect the user's start/end work hours from their answers.
 - Calendar events are immovable; schedule tasks around them.
 - Add 10-minute buffers between blocks.
