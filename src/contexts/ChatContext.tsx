@@ -16,8 +16,8 @@ import React, {
   useRef,
   type ReactNode,
 } from 'react';
-import type { ChatMessage } from '@/lib/firebase/firestore';
-import { getChatHistory, addChatMessage } from '@/lib/firebase/firestore';
+import type { ChatMessage, Task } from '@/lib/firebase/firestore';
+import { getChatHistory, addChatMessage, getUserTasks, addTask } from '@/lib/firebase/firestore';
 import { useAuthContext } from './AuthContext';
 
 // ---------------------------------------------------------------------------
@@ -94,10 +94,33 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         console.error('Failed to persist user message:', err);
       });
 
-      // 2. Build context from the last N messages
-      const contextMessages = [...messages, userMsg]
-        .slice(-MAX_CONTEXT_MESSAGES)
-        .map((m) => ({ role: m.role, content: m.content }));
+      // 2. Fetch current tasks to build context
+      let currentTasks: Task[] = [];
+      try {
+        currentTasks = await getUserTasks(user.uid);
+      } catch (err) {
+        console.error('Failed to get tasks for context:', err);
+      }
+
+      const systemPromptContent = `You are TARS-AI, an intelligent time-management assistant.
+You have access to the user's current tasks.
+CURRENT TASKS:
+${JSON.stringify(currentTasks.map(t => ({ id: t.id, title: t.title, status: t.status })), null, 2)}
+
+You can manage the user's tasks by outputting XML-like commands in your response. These commands will be intercepted and executed by the system.
+Commands available:
+- <ADD_TASK>{"title": "...", "description": "...", "estimatedDuration": 30}</ADD_TASK>
+
+When a user asks you to add a task, output the <ADD_TASK> command anywhere in your response containing a JSON payload. Do NOT wrap the command in markdown code blocks. Always include a title. estimatedDuration is in minutes.
+`;
+
+      const systemPromptMsg = { role: 'system', content: systemPromptContent };
+
+      const contextMessages = [
+        systemPromptMsg,
+        ...messages.slice(-MAX_CONTEXT_MESSAGES),
+        userMsg,
+      ].map((m) => ({ role: m.role, content: m.content }));
 
       // 3. Stream AI response
       setIsStreaming(true);
@@ -179,19 +202,51 @@ export function ChatProvider({ children }: { children: ReactNode }) {
             }
           }
 
+          // Process Agent Commands
+          const processAgentCommands = async (text: string) => {
+            let cleanedText = text;
+            const addTaskRegex = /<ADD_TASK>([\s\S]*?)<\/ADD_TASK>/g;
+            let match;
+            
+            while ((match = addTaskRegex.exec(text)) !== null) {
+              try {
+                const jsonStr = match[1].trim();
+                const payload = JSON.parse(jsonStr);
+                
+                if (payload.title) {
+                   await addTask(user.uid, {
+                     title: payload.title,
+                     description: payload.description || '',
+                     status: 'todo',
+                     estimatedDuration: payload.estimatedDuration || 30,
+                   });
+                   
+                   cleanedText = cleanedText.replace(match[0], `\n> ✅ **Added Task:** ${payload.title}\n`);
+                }
+              } catch (e) {
+                 console.error("Failed to parse ADD_TASK command", e);
+                 cleanedText = cleanedText.replace(match[0], `\n> ❌ **Failed to parse task command**\n`);
+              }
+            }
+            return cleanedText;
+          };
+
           // Persist the complete assistant message
           if (accumulated) {
+            const cleanContent = await processAgentCommands(accumulated);
+            
             const assistantMsg: ChatMessage = {
               id: crypto.randomUUID(),
               role: 'assistant',
-              content: accumulated,
+              content: cleanContent,
               timestamp: new Date(),
             };
             setMessages((prev) => [...prev, assistantMsg]);
+            setCurrentStreamedText(cleanContent); // Update UI with cleaned text
 
             addChatMessage(user.uid, {
               role: 'assistant',
-              content: accumulated,
+              content: cleanContent,
             }).catch((err) => {
               console.error('Failed to persist assistant message:', err);
             });
@@ -208,18 +263,44 @@ export function ChatProvider({ children }: { children: ReactNode }) {
             data.choices?.[0]?.message?.content ?? data.content ?? '';
 
           if (assistantContent) {
+            // Process Agent Commands for non-streaming
+            const processAgentCommands = async (text: string) => {
+              let cleanedText = text;
+              const addTaskRegex = /<ADD_TASK>([\s\S]*?)<\/ADD_TASK>/g;
+              let match;
+              while ((match = addTaskRegex.exec(text)) !== null) {
+                try {
+                  const payload = JSON.parse(match[1].trim());
+                  if (payload.title) {
+                     await addTask(user.uid, {
+                       title: payload.title,
+                       description: payload.description || '',
+                       status: 'todo',
+                       estimatedDuration: payload.estimatedDuration || 30,
+                     });
+                     cleanedText = cleanedText.replace(match[0], `\n> ✅ **Added Task:** ${payload.title}\n`);
+                  }
+                } catch (e) {
+                   cleanedText = cleanedText.replace(match[0], `\n> ❌ **Failed to parse task command**\n`);
+                }
+              }
+              return cleanedText;
+            };
+
+            const cleanContent = await processAgentCommands(assistantContent);
+
             const assistantMsg: ChatMessage = {
               id: crypto.randomUUID(),
               role: 'assistant',
-              content: assistantContent,
+              content: cleanContent,
               timestamp: new Date(),
             };
             setMessages((prev) => [...prev, assistantMsg]);
-            setCurrentStreamedText(assistantContent);
+            setCurrentStreamedText(cleanContent);
 
             addChatMessage(user.uid, {
               role: 'assistant',
-              content: assistantContent,
+              content: cleanContent,
             }).catch((err) => {
               console.error('Failed to persist assistant message:', err);
             });
