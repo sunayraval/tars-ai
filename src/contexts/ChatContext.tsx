@@ -144,13 +144,21 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
                 try {
                   const parsed = JSON.parse(data);
+                  
+                  if (parsed.error) {
+                    throw new Error(parsed.error);
+                  }
+                  
                   const token =
                     parsed.choices?.[0]?.delta?.content ?? parsed.content ?? '';
                   if (token) {
                     accumulated += token;
                     setCurrentStreamedText(accumulated);
                   }
-                } catch {
+                } catch (e: any) {
+                  if (e.message && data.includes('"error":')) {
+                    throw e; // Bubble up OpenRouter error
+                  }
                   // Non-JSON data line — may be a raw token
                   if (data && data !== '[DONE]') {
                     accumulated += data;
@@ -183,6 +191,11 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         } else {
           // Non-streaming JSON response
           const data = await response.json();
+          
+          if (data.error) {
+            throw new Error(data.error);
+          }
+          
           const assistantContent =
             data.choices?.[0]?.message?.content ?? data.content ?? '';
 
@@ -212,7 +225,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           const errorMsg: ChatMessage = {
             id: crypto.randomUUID(),
             role: 'system',
-            content: 'Sorry, something went wrong. Please try again.',
+            content: `Error: ${err.message || 'Something went wrong. Please check your API key.'}`,
             timestamp: new Date(),
           };
           setMessages((prev) => [...prev, errorMsg]);
