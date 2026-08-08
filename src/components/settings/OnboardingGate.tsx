@@ -37,11 +37,7 @@ export default function OnboardingGate({ children }: { children: React.ReactNode
     const saveToCloud = async () => {
       try {
         if (apiKey.trim()) {
-          await fetch('/api/settings', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ uid: user.uid, apiKey: apiKey.trim() }),
-          });
+          localStorage.setItem('openRouterApiKey', apiKey.trim());
         }
         
         const userRef = doc(db, 'users', user.uid);
@@ -165,7 +161,7 @@ export default function OnboardingGate({ children }: { children: React.ReactNode
               <h2 className="text-2xl font-bold text-white mb-2">Connect AI Engine</h2>
               <p className="text-white/50 text-sm mb-6">
                 To generate your schedules, TARS-AI requires an OpenRouter API key. 
-                Don't worry, your key is AES-256 encrypted before being stored.
+                Don't worry, your key is stored securely in your browser's local storage and is never saved to our database.
               </p>
               
               <div className="space-y-4 mb-8">

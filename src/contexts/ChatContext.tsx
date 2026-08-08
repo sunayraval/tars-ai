@@ -47,7 +47,7 @@ const MAX_CONTEXT_MESSAGES = 20;
 // ---------------------------------------------------------------------------
 
 export function ChatProvider({ children }: { children: ReactNode }) {
-  const { user } = useAuthContext();
+  const { user, userPreferences } = useAuthContext();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [currentStreamedText, setCurrentStreamedText] = useState('');
@@ -107,18 +107,29 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       abortRef.current = controller;
 
       try {
+        const apiKey = localStorage.getItem('openRouterApiKey');
+        const model = userPreferences?.model || 'openrouter/free'; // wait, model is stored in userPreferences or settings?
+
+        // We will pass the model and apiKey
         const response = await fetch('/api/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             messages: contextMessages,
             uid: user.uid,
+            apiKey: apiKey || '',
+            model: model,
           }),
           signal: controller.signal,
         });
 
         if (!response.ok) {
-          throw new Error(`Chat API error: ${response.status}`);
+          const errorText = await response.text();
+          let parsedError = errorText;
+          try {
+            parsedError = JSON.parse(errorText).error || errorText;
+          } catch {}
+          throw new Error(`API error ${response.status}: ${parsedError}`);
         }
 
         const contentType = response.headers.get('content-type') ?? '';

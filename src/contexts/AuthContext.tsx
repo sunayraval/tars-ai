@@ -54,7 +54,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const fetchPrefs = useCallback(async (uid: string) => {
     try {
       const doc = await getUserDocument(uid);
-      setUserPreferences(doc?.preferences || {});
+      setUserPreferences({ ...(doc?.preferences || {}), model: doc?.settings?.model });
     } catch (e) {
       console.error(e);
       setUserPreferences({});

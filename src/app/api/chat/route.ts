@@ -1,40 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { streamChat } from "@/lib/openrouter/client";
-import crypto from "crypto";
-import { getFirestore, doc, getDoc } from "firebase/firestore";
-import { app } from "@/lib/firebase/config";
-
-const db = getFirestore(app);
-
-/**
- * Decrypts a value encrypted with AES-256-GCM.
- */
-function decryptApiKey(encrypted: string): string {
-  const secret = process.env.ENCRYPTION_SECRET;
-  if (!secret) throw new Error("ENCRYPTION_SECRET not configured");
-
-  const [ivHex, authTagHex, ciphertext] = encrypted.split(":");
-  const key = Buffer.from(secret, "hex");
-  const iv = Buffer.from(ivHex, "hex");
-  const authTag = Buffer.from(authTagHex, "hex");
-
-  const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv);
-  decipher.setAuthTag(authTag);
-
-  let decrypted = decipher.update(ciphertext, "hex", "utf8");
-  decrypted += decipher.final("utf8");
-  return decrypted;
-}
 
 /**
  * POST /api/chat
- * Accepts { messages, uid } and streams an OpenRouter chat completion.
- * The API key is retrieved from Firestore and decrypted server-side.
+ * Accepts { messages, uid, apiKey, model } and streams an OpenRouter chat completion.
  */
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { messages, uid } = body;
+    const { messages, uid, apiKey, model } = body;
 
     if (!uid) {
       return NextResponse.json(
@@ -50,21 +24,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Retrieve the user's encrypted API key and model preference
-    const userDocRef = doc(db, "users", uid);
-    const userSnap = await getDoc(userDocRef);
-
-    if (!userSnap.exists()) {
-      return NextResponse.json(
-        { error: "User not found" },
-        { status: 404 }
-      );
-    }
-
-    const userData = userSnap.data();
-    const encryptedApiKey = userData?.encryptedApiKey;
-
-    if (!encryptedApiKey) {
+    if (!apiKey) {
       return NextResponse.json(
         {
           error:
@@ -74,11 +34,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const apiKey = decryptApiKey(encryptedApiKey);
-    const model = userData?.model ?? "openrouter/free";
+    const selectedModel = model ?? "openrouter/free";
 
     // Stream the response
-    const stream = streamChat(messages, apiKey, model);
+    const stream = streamChat(messages, apiKey, selectedModel);
 
     return new Response(stream, {
       headers: {

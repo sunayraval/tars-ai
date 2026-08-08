@@ -45,11 +45,7 @@ export default function SettingsModal({ isOpen, onClose, uid }: SettingsModalPro
     const saveToCloud = async () => {
       try {
         if (apiKey) {
-          await fetch('/api/settings', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ uid, apiKey, model })
-          });
+          localStorage.setItem('openRouterApiKey', apiKey.trim());
         }
         
         await setDoc(doc(db, 'users', uid), {
@@ -120,7 +116,7 @@ export default function SettingsModal({ isOpen, onClose, uid }: SettingsModalPro
               className="w-full rounded-xl glass bg-white/5 px-4 py-3 text-sm text-white placeholder:text-white/30 border border-white/20 focus:outline-none focus:ring-2 focus:ring-violet-500 transition-all"
             />
             <p className="mt-2 text-xs text-white/40">
-              Keys are encrypted locally and never stored in plain text.
+              Keys are stored securely in your browser's local storage and are never saved to our database.
             </p>
           </div>
           

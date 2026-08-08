@@ -18,6 +18,7 @@ export interface User {
   email: string | null;
   displayName: string | null;
   preferences: UserPreferences;
+  settings?: any;
 }
 
 export interface Task {
