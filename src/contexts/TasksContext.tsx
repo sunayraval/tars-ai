@@ -52,9 +52,29 @@ export function TasksProvider({ children }: { children: ReactNode }) {
   const addTask = useCallback(
     async (task: Omit<Task, 'id' | 'createdAt' | 'updatedAt'>) => {
       if (!user?.uid) throw new Error('No user ID provided');
-      const newTask = await firestoreAddTask(user.uid, task);
-      setTasks((prev) => [...prev, newTask]);
-      return newTask;
+      
+      const tempId = `temp-${Date.now()}`;
+      const tempTask: Task = {
+        ...task,
+        id: tempId,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      
+      // Optimistic update: instantly show the task
+      setTasks((prev) => [tempTask, ...prev]);
+      
+      // Fire-and-forget to Firestore (background sync)
+      firestoreAddTask(user.uid, task).then((realTask) => {
+        // Swap temp task with the real database task
+        setTasks((prev) => prev.map((t) => t.id === tempId ? realTask : t));
+      }).catch((e) => {
+        console.error("Failed to save task to database", e);
+        // Rollback on failure
+        setTasks((prev) => prev.filter((t) => t.id !== tempId));
+      });
+      
+      return tempTask;
     },
     [user?.uid]
   );
