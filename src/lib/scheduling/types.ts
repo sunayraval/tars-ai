@@ -42,6 +42,8 @@ export interface TimeBlock {
   estimatedDuration: number;
   /** Higher number = higher priority. Used for drop decisions during recalculation. */
   priority?: number;
+  /** Category for color-coding and grouping. */
+  category?: 'work' | 'study' | 'personal' | 'health' | 'errand' | 'other';
 }
 
 // ---------------------------------------------------------------------------

@@ -21,11 +21,14 @@ export interface User {
   settings?: any;
 }
 
+export type TaskCategory = 'work' | 'study' | 'personal' | 'health' | 'errand' | 'other';
+
 export interface Task {
   id: string;
   title: string;
   description?: string;
   status: 'todo' | 'in_progress' | 'done';
+  category?: TaskCategory;
   estimatedDuration?: number; // in minutes
   scheduledStart?: Timestamp | Date;
   scheduledEnd?: Timestamp | Date;

@@ -78,7 +78,7 @@ export function streamChat(
             const data = trimmed.slice(6);
             if (data === "[DONE]") {
               controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-              continue;
+              break;
             }
 
             try {

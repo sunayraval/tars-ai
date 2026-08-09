@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect } from 'react';
 import { useScheduleContext } from '@/contexts/ScheduleContext';
-import { useChatContext } from '@/contexts/ChatContext';
 import GlowButton from '@/components/ui/GlowButton';
 
 export default function ScheduleBuilder() {

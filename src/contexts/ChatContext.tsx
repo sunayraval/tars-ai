@@ -4,7 +4,10 @@
  * ChatContext
  *
  * Manages the chat conversation state: message history, SSE streaming,
- * Firestore persistence, and system message injection.
+ * Firestore persistence, system message injection, and AI command extraction.
+ *
+ * Performance: Uses in-memory tasks from TasksContext instead of blocking
+ * on Firestore reads before every AI request.
  */
 
 import React, {
@@ -17,8 +20,9 @@ import React, {
   type ReactNode,
 } from 'react';
 import type { ChatMessage, Task } from '@/lib/firebase/firestore';
-import { getChatHistory, addChatMessage, getUserTasks, addTask } from '@/lib/firebase/firestore';
+import { getChatHistory, addChatMessage, addTask } from '@/lib/firebase/firestore';
 import { useAuthContext } from './AuthContext';
+import { useTasksContext } from './TasksContext';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -53,6 +57,14 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const [currentStreamedText, setCurrentStreamedText] = useState('');
   const abortRef = useRef<AbortController | null>(null);
 
+  // Access in-memory tasks (NO Firestore round-trip per message)
+  let tasksCtx: { tasks: Task[]; updateTask: (id: string, u: Partial<Task>) => Promise<void>; deleteTask: (id: string) => Promise<void>; refreshTasks: () => Promise<void> } | null = null;
+  try {
+    tasksCtx = useTasksContext();
+  } catch {
+    // TasksContext may not be mounted yet during SSR
+  }
+
   // Load chat history from Firestore on mount / user change
   useEffect(() => {
     if (!user) {
@@ -72,6 +84,137 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       cancelled = true;
     };
   }, [user]);
+
+  // ------------------------------------------------------------------
+  // Build the AI system prompt with full context
+  // ------------------------------------------------------------------
+  const buildSystemPrompt = useCallback(() => {
+    const now = new Date();
+    const currentTime = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const currentDate = now.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+    const userName = user?.displayName?.split(' ')[0] ?? 'there';
+
+    const currentTasks = tasksCtx?.tasks ?? [];
+    const taskListStr = currentTasks.length > 0
+      ? currentTasks.map(t => `- [${t.status}] "${t.title}" (id: ${t.id})${t.category ? ` [${t.category}]` : ''}${t.estimatedDuration ? ` ~${t.estimatedDuration}min` : ''}`).join('\n')
+      : '(no tasks yet)';
+
+    return `You are TARS-AI, ${userName}'s intelligent personal productivity assistant.
+CURRENT TIME: ${currentTime}
+CURRENT DATE: ${currentDate}
+
+YOUR USER'S TASKS:
+${taskListStr}
+
+You can manage tasks by outputting XML command tags in your response. The system reads these tags and executes them automatically. YOU MUST output the tag for the action to happen — just saying "I added it" does nothing.
+
+AVAILABLE COMMANDS:
+
+1. ADD A TASK:
+<ADD_TASK>{"title": "Task Name", "description": "optional details", "estimatedDuration": 60, "category": "study"}</ADD_TASK>
+- estimatedDuration is in minutes (2 hrs = 120)
+- category must be one of: work, study, personal, health, errand, other
+
+2. COMPLETE A TASK:
+<COMPLETE_TASK>{"id": "the-task-id"}</COMPLETE_TASK>
+
+3. DELETE A TASK:
+<DELETE_TASK>{"id": "the-task-id"}</DELETE_TASK>
+
+4. UPDATE A TASK:
+<UPDATE_TASK>{"id": "the-task-id", "title": "New Title", "estimatedDuration": 90, "category": "work"}</UPDATE_TASK>
+
+RULES:
+1. Output commands as raw text — do NOT wrap in markdown code blocks.
+2. You MUST output the XML tag for any action. If you don't output the tag, nothing happens.
+3. When the user asks to add a task, ALWAYS output <ADD_TASK>. When they ask to remove one, ALWAYS output <DELETE_TASK>. When they ask to complete one, ALWAYS output <COMPLETE_TASK>.
+4. You can output multiple commands in one response.
+5. Be concise, friendly, and personalized. Use ${userName}'s name occasionally. Reference the current time when relevant.
+6. If the user asks about their schedule or tasks, refer to the data above — don't say you can't access it.
+7. NEVER output safety labels, metadata, or "User Safety: safe" text.`;
+  }, [user, tasksCtx?.tasks]);
+
+  // ------------------------------------------------------------------
+  // Process AI command tags from the response
+  // ------------------------------------------------------------------
+  const processAgentCommands = useCallback(async (text: string): Promise<string> => {
+    if (!user) return text;
+    let cleanedText = text;
+
+    // ADD_TASK
+    const addTaskRegex = /<ADD_TASK>([\s\S]*?)<\/ADD_TASK>/g;
+    let match;
+    while ((match = addTaskRegex.exec(text)) !== null) {
+      try {
+        const payload = JSON.parse(match[1].trim());
+        if (payload.title) {
+          if (tasksCtx) {
+            await tasksCtx.refreshTasks(); // Sync before adding
+          }
+          await addTask(user.uid, {
+            title: payload.title,
+            description: payload.description || '',
+            status: 'todo',
+            category: payload.category || 'other',
+            estimatedDuration: payload.estimatedDuration || 30,
+          });
+          if (tasksCtx) await tasksCtx.refreshTasks();
+          cleanedText = cleanedText.replace(match[0], `\n> ✅ **Added Task:** ${payload.title}${payload.category ? ` [${payload.category}]` : ''}\n`);
+        }
+      } catch (e) {
+        console.error('Failed to parse ADD_TASK command', e);
+        cleanedText = cleanedText.replace(match[0], `\n> ❌ **Failed to add task**\n`);
+      }
+    }
+
+    // COMPLETE_TASK
+    const completeRegex = /<COMPLETE_TASK>([\s\S]*?)<\/COMPLETE_TASK>/g;
+    while ((match = completeRegex.exec(text)) !== null) {
+      try {
+        const payload = JSON.parse(match[1].trim());
+        if (payload.id && tasksCtx) {
+          await tasksCtx.updateTask(payload.id, { status: 'done' });
+          cleanedText = cleanedText.replace(match[0], `\n> ✅ **Completed task**\n`);
+        }
+      } catch (e) {
+        console.error('Failed to parse COMPLETE_TASK command', e);
+        cleanedText = cleanedText.replace(match[0], `\n> ❌ **Failed to complete task**\n`);
+      }
+    }
+
+    // DELETE_TASK
+    const deleteRegex = /<DELETE_TASK>([\s\S]*?)<\/DELETE_TASK>/g;
+    while ((match = deleteRegex.exec(text)) !== null) {
+      try {
+        const payload = JSON.parse(match[1].trim());
+        if (payload.id && tasksCtx) {
+          await tasksCtx.deleteTask(payload.id);
+          cleanedText = cleanedText.replace(match[0], `\n> 🗑️ **Deleted task**\n`);
+        }
+      } catch (e) {
+        console.error('Failed to parse DELETE_TASK command', e);
+        cleanedText = cleanedText.replace(match[0], `\n> ❌ **Failed to delete task**\n`);
+      }
+    }
+
+    // UPDATE_TASK
+    const updateRegex = /<UPDATE_TASK>([\s\S]*?)<\/UPDATE_TASK>/g;
+    while ((match = updateRegex.exec(text)) !== null) {
+      try {
+        const payload = JSON.parse(match[1].trim());
+        if (payload.id && tasksCtx) {
+          const { id, ...updates } = payload;
+          await tasksCtx.updateTask(id, updates);
+          cleanedText = cleanedText.replace(match[0], `\n> ✏️ **Updated task**\n`);
+        }
+      } catch (e) {
+        console.error('Failed to parse UPDATE_TASK command', e);
+        cleanedText = cleanedText.replace(match[0], `\n> ❌ **Failed to update task**\n`);
+      }
+    }
+
+    return cleanedText;
+  }, [user, tasksCtx]);
 
   // ------------------------------------------------------------------
   // Send a user message and stream the AI response
@@ -94,38 +237,15 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         console.error('Failed to persist user message:', err);
       });
 
-      // 2. Start streaming UI immediately (optimistic UI)
+      // 2. Start streaming UI immediately (NO Firestore blocking)
       setIsStreaming(true);
       setCurrentStreamedText('');
 
       const controller = new AbortController();
       abortRef.current = controller;
 
-      // 3. Fetch current tasks to build context
-      let currentTasks: Task[] = [];
-      try {
-        currentTasks = await getUserTasks(user.uid);
-      } catch (err) {
-        console.error('Failed to get tasks for context:', err);
-      }
-
-      const systemPromptContent = `You are TARS-AI, an intelligent time-management and productivity assistant.
-You have access to the user's current tasks.
-CURRENT TASKS:
-${JSON.stringify(currentTasks.map(t => ({ id: t.id, title: t.title, status: t.status })), null, 2)}
-
-CRITICAL INSTRUCTION: You can manage the user's tasks by outputting XML commands. 
-If the user asks you to add a task, schedule something, or add something to their agenda, you MUST output the following command exactly as shown:
-<ADD_TASK>{"title": "Task Name", "description": "Details", "estimatedDuration": 120}</ADD_TASK>
-
-RULES FOR COMMANDS:
-1. You must output the command in raw text anywhere in your response.
-2. Do NOT wrap the command in markdown code blocks (e.g. no \`\`\`xml).
-3. Always include a title. 
-4. estimatedDuration must be a number in minutes (e.g., 2 hrs = 120).
-5. If the user asks you to add a task, YOU MUST OUTPUT THE TAG. If you just say "I added it" but don't output the tag, the task will NOT be added. THE SYSTEM READS THE TAG.
-`;
-
+      // 3. Build system prompt from IN-MEMORY data (instant, no network)
+      const systemPromptContent = buildSystemPrompt();
       const systemPromptMsg = { role: 'system', content: systemPromptContent };
 
       const contextMessages = [
@@ -136,9 +256,8 @@ RULES FOR COMMANDS:
 
       try {
         const apiKey = localStorage.getItem('openRouterApiKey');
-        const model = userPreferences?.model || 'openrouter/free'; // wait, model is stored in userPreferences or settings?
+        const model = userPreferences?.model || 'openrouter/free';
 
-        // We will pass the model and apiKey
         const response = await fetch('/api/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -186,11 +305,11 @@ RULES FOR COMMANDS:
 
                 try {
                   const parsed = JSON.parse(data);
-                  
+
                   if (parsed.error) {
                     throw new Error(parsed.error);
                   }
-                  
+
                   const token =
                     parsed.choices?.[0]?.delta?.content ?? parsed.content ?? '';
                   if (token) {
@@ -199,9 +318,8 @@ RULES FOR COMMANDS:
                   }
                 } catch (e: any) {
                   if (e.message && data.includes('"error":')) {
-                    throw e; // Bubble up OpenRouter error
+                    throw e;
                   }
-                  // Non-JSON data line — may be a raw token
                   if (data && data !== '[DONE]') {
                     accumulated += data;
                     setCurrentStreamedText(accumulated);
@@ -211,39 +329,10 @@ RULES FOR COMMANDS:
             }
           }
 
-          // Process Agent Commands
-          const processAgentCommands = async (text: string) => {
-            let cleanedText = text;
-            const addTaskRegex = /<ADD_TASK>([\s\S]*?)<\/ADD_TASK>/g;
-            let match;
-            
-            while ((match = addTaskRegex.exec(text)) !== null) {
-              try {
-                const jsonStr = match[1].trim();
-                const payload = JSON.parse(jsonStr);
-                
-                if (payload.title) {
-                   await addTask(user.uid, {
-                     title: payload.title,
-                     description: payload.description || '',
-                     status: 'todo',
-                     estimatedDuration: payload.estimatedDuration || 30,
-                   });
-                   
-                   cleanedText = cleanedText.replace(match[0], `\n> ✅ **Added Task:** ${payload.title}\n`);
-                }
-              } catch (e) {
-                 console.error("Failed to parse ADD_TASK command", e);
-                 cleanedText = cleanedText.replace(match[0], `\n> ❌ **Failed to parse task command**\n`);
-              }
-            }
-            return cleanedText;
-          };
-
           // Persist the complete assistant message
           if (accumulated) {
             const cleanContent = await processAgentCommands(accumulated);
-            
+
             const assistantMsg: ChatMessage = {
               id: crypto.randomUUID(),
               role: 'assistant',
@@ -251,7 +340,7 @@ RULES FOR COMMANDS:
               timestamp: new Date(),
             };
             setMessages((prev) => [...prev, assistantMsg]);
-            setCurrentStreamedText(cleanContent); // Update UI with cleaned text
+            setCurrentStreamedText(cleanContent);
 
             addChatMessage(user.uid, {
               role: 'assistant',
@@ -263,39 +352,15 @@ RULES FOR COMMANDS:
         } else {
           // Non-streaming JSON response
           const data = await response.json();
-          
+
           if (data.error) {
             throw new Error(data.error);
           }
-          
+
           const assistantContent =
             data.choices?.[0]?.message?.content ?? data.content ?? '';
 
           if (assistantContent) {
-            // Process Agent Commands for non-streaming
-            const processAgentCommands = async (text: string) => {
-              let cleanedText = text;
-              const addTaskRegex = /<ADD_TASK>([\s\S]*?)<\/ADD_TASK>/g;
-              let match;
-              while ((match = addTaskRegex.exec(text)) !== null) {
-                try {
-                  const payload = JSON.parse(match[1].trim());
-                  if (payload.title) {
-                     await addTask(user.uid, {
-                       title: payload.title,
-                       description: payload.description || '',
-                       status: 'todo',
-                       estimatedDuration: payload.estimatedDuration || 30,
-                     });
-                     cleanedText = cleanedText.replace(match[0], `\n> ✅ **Added Task:** ${payload.title}\n`);
-                  }
-                } catch (e) {
-                   cleanedText = cleanedText.replace(match[0], `\n> ❌ **Failed to parse task command**\n`);
-                }
-              }
-              return cleanedText;
-            };
-
             const cleanContent = await processAgentCommands(assistantContent);
 
             const assistantMsg: ChatMessage = {
@@ -332,7 +397,7 @@ RULES FOR COMMANDS:
         abortRef.current = null;
       }
     },
-    [user, isStreaming, messages]
+    [user, isStreaming, messages, buildSystemPrompt, processAgentCommands, userPreferences?.model]
   );
 
   // ------------------------------------------------------------------
